@@ -11,7 +11,12 @@ import {
     Calendar,
     Layers,
     HelpCircle,
-    ChevronDown
+    ChevronDown,
+    Download,
+    Copy,
+    Target,
+    PenTool,
+    XCircle
 } from 'lucide-react';
 import {
     Card,
@@ -72,6 +77,7 @@ export const Assessments = () => {
     const [currentAnalysis, setCurrentAnalysis] = useState(null);
     const [formData, setFormData] = useState({ company: '', role: '', jd: '' });
     const [isAnalyzing, setIsAnalyzing] = useState(false);
+    const [skillConfidence, setSkillConfidence] = useState({}); // { skillName: 'know' | 'practice' }
 
     // Load History
     useEffect(() => {
@@ -81,6 +87,13 @@ export const Assessments = () => {
         }
     }, []);
 
+    // Initialize/Update live confidence state when analysis changes
+    useEffect(() => {
+        if (currentAnalysis) {
+            setSkillConfidence(currentAnalysis.skillConfidenceMap || {});
+        }
+    }, [currentAnalysis]);
+
     const handleAnalyze = () => {
         if (!formData.company || !formData.role || !formData.jd) return;
 
@@ -88,8 +101,16 @@ export const Assessments = () => {
         setTimeout(() => {
             const result = analyzeJD(formData.company, formData.role, formData.jd);
 
+            // Initialize default confidence map (all need practice initially)
+            const initialConfidence = {};
+            Object.values(result.extractedSkills).flat().forEach(skill => {
+                initialConfidence[skill] = 'practice';
+            });
+            result.skillConfidenceMap = initialConfidence;
+            result.baseReadinessScore = result.readinessScore; // Store base score
+
             // Save to history
-            const newHistory = [result, ...history].slice(0, 10); // Keep last 10
+            const newHistory = [result, ...history].slice(0, 10);
             setHistory(newHistory);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
 
@@ -109,24 +130,111 @@ export const Assessments = () => {
         localStorage.removeItem(STORAGE_KEY);
     };
 
+    // Live Score Logic
+    const calculateCurrentScore = () => {
+        if (!currentAnalysis) return 0;
+        let score = currentAnalysis.baseReadinessScore || currentAnalysis.readinessScore;
+
+        Object.entries(skillConfidence).forEach(([skill, status]) => {
+            if (status === 'know') score += 2;
+            if (status === 'practice') score -= 2;
+        });
+
+        return Math.max(0, Math.min(100, score));
+    };
+
+    const toggleSkill = (skill) => {
+        setSkillConfidence(prev => {
+            const next = { ...prev, [skill]: prev[skill] === 'know' ? 'practice' : 'know' };
+
+            // Persist changes to history immediately
+            if (currentAnalysis) {
+                const updatedAnalysis = {
+                    ...currentAnalysis,
+                    skillConfidenceMap: next,
+                    readinessScore: calculateCurrentScore() // update visible score in object for safety
+                };
+
+                const updatedHistory = history.map(h => h.id === currentAnalysis.id ? updatedAnalysis : h);
+                setHistory(updatedHistory);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+                setCurrentAnalysis(updatedAnalysis); // Update current view to reflect persistence
+            }
+            return next;
+        });
+    };
+
+    // Export Tools
+    const copyToClipboard = (text) => {
+        navigator.clipboard.writeText(text);
+        alert("Copied to clipboard!");
+    };
+
+    const generateExportText = () => {
+        if (!currentAnalysis) return "";
+        return `
+JOB ANALYSIS REPORT
+Company: ${currentAnalysis.company}
+Role: ${currentAnalysis.role}
+Date: ${new Date(currentAnalysis.createdAt).toLocaleDateString()}
+Score: ${calculateCurrentScore()}%
+
+SKILLS:
+${Object.entries(currentAnalysis.extractedSkills).map(([cat, skills]) =>
+            `\n[${cat.toUpperCase()}]\n` + skills.map(s => `- ${s} (${skillConfidence[s]?.toUpperCase() || 'PRACTICE'})`).join('\n')
+        ).join('\n')}
+
+7-DAY PLAN:
+${currentAnalysis.plan.map(d => `${d.day}: ${d.focus}\n${d.tasks.map(t => `  - ${t}`).join('\n')}`).join('\n')}
+
+QUESTIONS:
+${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
+        `.trim();
+    };
+
+    const downloadTxt = () => {
+        const element = document.createElement("a");
+        const file = new Blob([generateExportText()], { type: 'text/plain' });
+        element.href = URL.createObjectURL(file);
+        element.download = `Analysis_${currentAnalysis.company}_${currentAnalysis.role}.txt`;
+        document.body.appendChild(element);
+        element.click();
+    };
+
     if (view === 'results' && currentAnalysis) {
+        const currentScore = calculateCurrentScore();
+        const weakSkills = Object.entries(skillConfidence)
+            .filter(([_, status]) => status === 'practice')
+            .map(([skill]) => skill)
+            .slice(0, 3);
+
         return (
-            <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <button
-                    onClick={() => setView('input')}
-                    className="mb-6 flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors"
-                >
-                    &larr; Back to Analysis
-                </button>
+            <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+                <div className="flex justify-between items-center mb-6">
+                    <button
+                        onClick={() => setView('input')}
+                        className="flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-indigo-600 transition-colors"
+                    >
+                        &larr; Back to Analysis
+                    </button>
+                    <div className="flex gap-2">
+                        <button onClick={() => copyToClipboard(currentAnalysis.plan.map(d => `${d.day}: ${d.focus}\n${d.tasks.join('\n')}`).join('\n\n'))} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-200 rounded-md hover:bg-gray-50 flex items-center gap-2">
+                            <Copy size={12} /> Plan
+                        </button>
+                        <button onClick={downloadTxt} className="px-3 py-1.5 text-xs font-medium bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-100 flex items-center gap-2">
+                            <Download size={12} /> Download Report
+                        </button>
+                    </div>
+                </div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     {/* Left Col: Overview & Skills */}
                     <div className="lg:col-span-1 space-y-6">
-                        <Card className="bg-white border-indigo-100 shadow-md">
+                        <Card className="bg-white border-indigo-100 shadow-md transition-all duration-300">
                             <CardContent className="pt-6 flex flex-col items-center text-center">
-                                <ScoreCircle score={currentAnalysis.readinessScore} />
+                                <ScoreCircle score={currentScore} />
                                 <h2 className="mt-4 text-xl font-bold text-gray-900">Readiness Score</h2>
-                                <p className="text-sm text-gray-500 mb-6">Based on JD match & density</p>
+                                <p className="text-sm text-gray-500 mb-6">Live update based on your self-check</p>
 
                                 <div className="w-full space-y-3 text-left">
                                     <div className="flex justify-between text-sm">
@@ -148,17 +256,37 @@ export const Assessments = () => {
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
-                                    <Layers size={18} className="text-indigo-600" /> Detected Skills
+                                    <Layers size={18} className="text-indigo-600" /> Skill Assessment
                                 </CardTitle>
+                                <CardDescription>Tap to toggle status</CardDescription>
                             </CardHeader>
                             <CardContent>
-                                <div className="flex flex-wrap gap-2">
+                                <div className="space-y-4">
                                     {Object.entries(currentAnalysis.extractedSkills).map(([cat, skills]) => (
-                                        skills.map((skill, i) => (
-                                            <span key={cat + i} className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-medium rounded-full border border-indigo-100">
-                                                {skill}
-                                            </span>
-                                        ))
+                                        <div key={cat}>
+                                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{cat}</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {skills.map((skill, i) => {
+                                                    const status = skillConfidence[skill] || 'practice';
+                                                    return (
+                                                        <button
+                                                            key={skill + i}
+                                                            onClick={() => toggleSkill(skill)}
+                                                            className={`
+                                                                px-3 py-1 text-xs font-medium rounded-full border transition-all flex items-center gap-1.5
+                                                                ${status === 'know'
+                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                                                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                                                }
+                                                            `}
+                                                        >
+                                                            {status === 'know' ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                                                            {skill}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
                                     ))}
                                     {Object.keys(currentAnalysis.extractedSkills).length === 0 && (
                                         <p className="text-sm text-gray-500 italic">No specific technical keywords detected.</p>
@@ -173,7 +301,7 @@ export const Assessments = () => {
 
                         {/* 7-Day Plan */}
                         <Card>
-                            <CardHeader>
+                            <CardHeader className="flex flex-row items-center justify-between">
                                 <CardTitle className="flex items-center gap-2">
                                     <Calendar size={18} className="text-indigo-600" /> 7-Day Preparation Plan
                                 </CardTitle>
@@ -219,6 +347,25 @@ export const Assessments = () => {
                                 </ul>
                             </CardContent>
                         </Card>
+
+                        {/* Action Next Box */}
+                        <div className="bg-indigo-900 rounded-xl p-6 text-white shadow-lg flex flex-col sm:flex-row items-center justify-between gap-6">
+                            <div>
+                                <h3 className="text-lg font-bold flex items-center gap-2">
+                                    <Target className="text-indigo-300" size={20} />
+                                    Ready to take action?
+                                </h3>
+                                <p className="text-indigo-200 text-sm mt-1 max-w-md">
+                                    {weakSkills.length > 0
+                                        ? `Focus your immediate attention on: ${weakSkills.join(', ')}`
+                                        : "You marked everything as 'Matched'. Great start! Review the deeper concepts now."
+                                    }
+                                </p>
+                            </div>
+                            <button className="whitespace-nowrap px-5 py-2.5 bg-white text-indigo-900 font-semibold rounded-lg hover:bg-indigo-50 transition-colors shadow-sm text-sm">
+                                Start Day 1 Plan
+                            </button>
+                        </div>
 
                     </div>
                 </div>
@@ -319,7 +466,21 @@ export const Assessments = () => {
                                 >
                                     <div className="flex justify-between items-start mb-1">
                                         <h4 className="font-semibold text-gray-900 text-sm group-hover:text-indigo-600 transition-colors line-clamp-1">{item.role}</h4>
-                                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">{item.readinessScore}%</span>
+                                        <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                                            {
+                                                (() => {
+                                                    // Calculate score dynamically for history item display
+                                                    let score = item.baseReadinessScore || item.readinessScore;
+                                                    if (item.skillConfidenceMap) {
+                                                        Object.values(item.skillConfidenceMap).forEach((status) => {
+                                                            if (status === 'know') score += 2;
+                                                            if (status === 'practice') score -= 2;
+                                                        });
+                                                    }
+                                                    return Math.max(0, Math.min(100, score));
+                                                })()
+                                            }%
+                                        </span>
                                     </div>
                                     <p className="text-xs text-gray-500 truncate">{item.company}</p>
                                     <div className="flex justify-between items-center mt-2">
