@@ -16,7 +16,11 @@ import {
     Copy,
     Target,
     PenTool,
-    XCircle
+    XCircle,
+    Building,
+    Users,
+    Zap,
+    Filter
 } from 'lucide-react';
 import {
     Card,
@@ -184,6 +188,9 @@ ${Object.entries(currentAnalysis.extractedSkills).map(([cat, skills]) =>
             `\n[${cat.toUpperCase()}]\n` + skills.map(s => `- ${s} (${skillConfidence[s]?.toUpperCase() || 'PRACTICE'})`).join('\n')
         ).join('\n')}
 
+HIRING PROCESS:
+${currentAnalysis.hireProcess?.map(r => `${r.name}: ${r.type}`).join('\n') || 'N/A'}
+
 7-DAY PLAN:
 ${currentAnalysis.plan.map(d => `${d.day}: ${d.focus}\n${d.tasks.map(t => `  - ${t}`).join('\n')}`).join('\n')}
 
@@ -207,6 +214,9 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
             .filter(([_, status]) => status === 'practice')
             .map(([skill]) => skill)
             .slice(0, 3);
+
+        const companyIntel = currentAnalysis.companyProfile || { size: 'Unknown', industry: 'Tech', focus: 'General' };
+        const process = currentAnalysis.hireProcess || [];
 
         return (
             <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -253,6 +263,48 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                             </CardContent>
                         </Card>
 
+                        {/* Company Intel Card - NEW */}
+                        <Card className="bg-gradient-to-br from-gray-50 to-white">
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-base">
+                                    <Building size={18} className="text-indigo-600" /> Company Intel
+                                </CardTitle>
+                                <CardDescription className="text-xs">Heuristically generated</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                                        <Users size={16} />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-500">Estimated Size</p>
+                                        <p className="font-semibold text-sm text-gray-900">{companyIntel.size}</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-purple-50 rounded-lg text-purple-600">
+                                        <Filter size={16} />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-gray-500">Industry</p>
+                                        <p className="font-semibold text-sm text-gray-900">{companyIntel.industry}</p>
+                                    </div>
+                                </div>
+                                <div className="p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <Zap size={14} className="text-amber-500" />
+                                        <span className="text-xs font-bold text-gray-700">Typical Hiring Focus</span>
+                                    </div>
+                                    <p className="text-xs text-gray-600 leading-relaxed">
+                                        {companyIntel.focus}
+                                    </p>
+                                </div>
+                            </CardContent>
+                            <CardFooter className="pt-0">
+                                <p className="text-[10px] text-gray-400 italic w-full text-center">Demo Mode: Intel generated based on keywords.</p>
+                            </CardFooter>
+                        </Card>
+
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
@@ -296,8 +348,45 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                         </Card>
                     </div>
 
-                    {/* Right Col: Plan & Checklist */}
+                    {/* Right Col: Process, Plan & Checklist */}
                     <div className="lg:col-span-2 space-y-6">
+
+                        {/* Round Mapping - NEW */}
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Briefcase size={18} className="text-indigo-600" /> Predicted Hiring Process
+                                </CardTitle>
+                                <CardDescription>Typical round structure for this profile</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="relative border-l-2 border-indigo-100 ml-4 space-y-8 py-2">
+                                    {process.map((round, i) => (
+                                        <div key={i} className="relative pl-8">
+                                            {/* Timeline dot */}
+                                            <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-white border-2 border-indigo-500"></div>
+
+                                            <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between mb-1">
+                                                <h4 className="text-sm font-bold text-gray-900">{round.name}</h4>
+                                                <span className="text-xs font-medium px-2 py-0.5 rounded bg-gray-100 text-gray-600">{round.type}</span>
+                                            </div>
+
+                                            <p className="text-sm text-gray-600 mb-3">{round.desc}</p>
+
+                                            <div className="bg-amber-50 border border-amber-100 rounded p-3 text-xs text-amber-800 flex gap-2">
+                                                <div className="shrink-0 pt-0.5"><Target size={12} /></div>
+                                                <div>
+                                                    <span className="font-semibold">Why this matters:</span> {round.why}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {(!process || process.length === 0) && (
+                                        <p className="text-sm text-gray-500 italic pl-8">No process data available.</p>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
 
                         {/* 7-Day Plan */}
                         <Card>

@@ -60,6 +60,112 @@ export const SKILL_DB = {
     }
 };
 
+const ENTERPRISE_COMPANIES = [
+    'amazon', 'google', 'microsoft', 'adobe', 'salesforce', 'oracle', 'ibm', 'cisco', 'intel',
+    'infosys', 'tcs', 'wipro', 'accenture', 'cognizant', 'capgemini', 'hcl', 'tech mahindra', 'deloitte',
+    'jpmorgan', 'goldman sachs', 'morgan stanley', 'wells fargo', 'american express'
+];
+
+const getCompanyProfile = (companyName) => {
+    const name = companyName.toLowerCase();
+
+    // Heuristic 1: Check known lists
+    const isEnterprise = ENTERPRISE_COMPANIES.some(c => name.includes(c));
+
+    if (isEnterprise) {
+        return {
+            size: 'Enterprise',
+            industry: 'Technology & Services',
+            focus: 'Strong fundamentals (DSA/OS/DBMS) + System Design'
+        };
+    }
+
+    // Heuristic 2: Name patterns
+    if (name.includes('inc') || name.includes('corp') || name.includes('ltd') || name.includes('group')) {
+        return {
+            size: 'Mid-Market',
+            industry: 'Corporate Services',
+            focus: 'Balanced mix of Coding & Framework skills'
+        };
+    }
+
+    // Default to Startup
+    return {
+        size: 'Startup / Growth',
+        industry: 'Product Development',
+        focus: 'Practical application logic, Speed, and Full-stack depth'
+    };
+};
+
+const generateHiringProcess = (profile, skills) => {
+    const rounds = [];
+    const isStartup = profile.size.includes('Startup');
+
+    if (isStartup) {
+        rounds.push({
+            name: "Round 1: Practical / Screening",
+            type: "Coding",
+            desc: "Often a take-home assignment or a live pair-programming session focused on building a feature.",
+            why: "Startups value 'builders'. They want to see clean, working code for a real problem."
+        });
+
+        if (skills.web) {
+            rounds.push({
+                name: "Round 2: Framework Deep Dive",
+                type: "Technical",
+                desc: "Questions on React/Node lifecycles, state management, and API design.",
+                why: "To verify you can ship production features starting Day 1."
+            });
+        } else {
+            rounds.push({
+                name: "Round 2: Problem Solving",
+                type: "Technical",
+                desc: "Solving algorithmic problems applied to real-world scenarios.",
+                why: "To test your logical thinking and adaptability."
+            });
+        }
+
+        rounds.push({
+            name: "Round 3: Founder / Culture Fit",
+            type: "Behavioral",
+            desc: "Discussion with a founder or lead engineer about product vision, ownership, and adaptability.",
+            why: "In small teams, culture and alignment are critical risks."
+        });
+
+    } else {
+        // Enterprise & Mid-Market
+        rounds.push({
+            name: "Round 1: Online Assessment",
+            type: "Aptitude & Coding",
+            desc: "Timed test on platform (HackerRank/Amcat). Includes 2-3 DSA problems + Aptitude MCQs.",
+            why: "Automated filter to screen thousands of applicants."
+        });
+
+        rounds.push({
+            name: "Round 2: Technical Interview I",
+            type: "DSA & Problem Solving",
+            desc: "Live coding on Data Structures (Arrays, Trees, Graphs). Code must be clean and optimized.",
+            why: "Tests core problem-solving capability independent of framework."
+        });
+
+        rounds.push({
+            name: "Round 3: Technical Interview II",
+            type: "System Design / Core CS",
+            desc: "Discussions on DBMS, OS concepts, and High/Low Level Design of a system.",
+            why: "Evaluates architectural thinking and theoretical depth."
+        });
+
+        rounds.push({
+            name: "Round 4: Managerial / HR",
+            type: "Behavioral",
+            desc: "STAR method questions, project experiences, and salary discussions.",
+            why: "Checks team fit, communication skills, and long-term potential."
+        });
+    }
+
+    return rounds;
+};
+
 // Heuristic Analysis Logic
 export const analyzeJD = (company, role, jdText) => {
     const text = jdText.toLowerCase();
@@ -115,19 +221,7 @@ export const analyzeJD = (company, role, jdText) => {
     // Shuffle and pick 10
     const questions = pool.sort(() => 0.5 - Math.random()).slice(0, 10);
 
-    // 4. Generate Checklist
-    const checklist = {
-        round1: ["Quantitative Aptitude", "Logical Reasoning", "Verbal Ability", "Resume Review"],
-        round2: ["Data Structures (Arrays/Strings)", "Basic Algorithms", "Time Complexity Analysis"],
-        round3: ["Project Deep Dive", "System Design Basics", "Core CS Concepts (OS/DBMS)"],
-        round4: ["Behavioral Answers (STAR Method)", "Company Research", "Questions for Interviewer"]
-    };
-
-    if (foundSkills.web) checklist.round3.push("Framework Lifecycle Methodologies");
-    if (foundSkills.data) checklist.round2.push("SQL Queries & Normalization");
-    if (foundSkills.cloud) checklist.round3.push("Deployment & CI/CD Pipelines");
-
-    // 5. Generate 7-Day Plan
+    // 4. Generate 7-Day Plan
     const plan = [
         { day: "Day 1-2", focus: "Foundations", tasks: ["Revise Core CS Concepts (OS, DBMS)", "Practice 10 Easy LeetCode problems", "Review Aptitude formulas"] },
         { day: "Day 3-4", focus: "Coding & Skills", tasks: ["Focus on " + (foundSkills.languages?.[0] || "Language") + " specific patterns", "Solve Medium Difficulty Problems", "Build/Refactor a small feature related to " + (foundSkills.web?.[0] || "Web")] },
@@ -135,6 +229,10 @@ export const analyzeJD = (company, role, jdText) => {
         { day: "Day 6", focus: "Mocks", tasks: ["Take a timed coding mock", "Record answers to HR questions", "Review System Design basics"] },
         { day: "Day 7", focus: "Revision", tasks: ["Review weak areas", "Read company engineering blog", "Relax and sleep well"] }
     ];
+
+    // 5. Company Intel & Round Mapping
+    const companyProfile = getCompanyProfile(company);
+    const hireProcess = generateHiringProcess(companyProfile, foundSkills);
 
     return {
         id: Date.now(),
@@ -145,7 +243,8 @@ export const analyzeJD = (company, role, jdText) => {
         extractedSkills: foundSkills,
         readinessScore: score,
         questions,
-        checklist,
-        plan
+        plan,
+        companyProfile,
+        hireProcess
     };
 };
