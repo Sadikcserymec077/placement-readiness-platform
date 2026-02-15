@@ -3,12 +3,12 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { LandingPage } from './pages/LandingPage';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import {
-  Dashboard,
   Practice,
   Assessments,
   Resources,
   Profile
 } from './pages/Placeholders';
+import { Dashboard } from './pages/Dashboard';
 
 function App() {
   return (
