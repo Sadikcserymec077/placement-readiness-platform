@@ -4,11 +4,11 @@ import { LandingPage } from './pages/LandingPage';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import {
   Practice,
-  Assessments,
   Resources,
   Profile
 } from './pages/Placeholders';
 import { Dashboard } from './pages/Dashboard';
+import { Assessments } from './pages/Assessments';
 
 function App() {
   return (
