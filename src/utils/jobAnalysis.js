@@ -1,13 +1,13 @@
 
 // Skill Dictionary & Question Bank
 export const SKILL_DB = {
-    core: {
+    coreCS: {
         keywords: ['DSA', 'Data Structures', 'Algorithms', 'OOP', 'Object Oriented', 'DBMS', 'Database Management', 'OS', 'Operating Systems', 'Networks', 'Computer Networks', 'System Design', 'Low Level Design', 'High Level Design', 'Distributed Systems'],
         questions: [
             "Explain the difference between a process and a thread.",
             "How does a hash map work internally? Handle collisions.",
             "Explain ACID properties in databases.",
-            "What is the difference between TCP and UDP?",
+            "What is the difference between TCP and UDP.",
             "Design a URL shortener system (High-level approach).",
             "Explain Polymorphism and its types with examples."
         ]
@@ -57,6 +57,10 @@ export const SKILL_DB = {
             "What is TDD (Test Driven Development)?",
             "How do you handle flaky tests?"
         ]
+    },
+    other: {
+        keywords: [], // Populated dynamically if empty
+        questions: []
     }
 };
 
@@ -67,7 +71,7 @@ const ENTERPRISE_COMPANIES = [
 ];
 
 const getCompanyProfile = (companyName) => {
-    const name = companyName.toLowerCase();
+    const name = (companyName || "").toLowerCase();
 
     // Heuristic 1: Check known lists
     const isEnterprise = ENTERPRISE_COMPANIES.some(c => name.includes(c));
@@ -109,7 +113,7 @@ const generateHiringProcess = (profile, skills) => {
             why: "Startups value 'builders'. They want to see clean, working code for a real problem."
         });
 
-        if (skills.web) {
+        if (skills.web && skills.web.length > 0) {
             rounds.push({
                 name: "Round 2: Framework Deep Dive",
                 type: "Technical",
@@ -168,18 +172,31 @@ const generateHiringProcess = (profile, skills) => {
 
 // Heuristic Analysis Logic
 export const analyzeJD = (company, role, jdText) => {
-    const text = jdText.toLowerCase();
-    const foundSkills = {};
+    const text = (jdText || "").toLowerCase();
+
+    // Strict Schema Initialization
+    const extractedSkills = {
+        coreCS: [],
+        languages: [],
+        web: [],
+        data: [],
+        cloud: [],
+        testing: [],
+        other: []
+    };
+
     let totalSkillCount = 0;
     let categoryCount = 0;
 
     // 1. Skill Extraction
     Object.keys(SKILL_DB).forEach(category => {
+        if (category === 'other') return; // skip other for now
+
         const hits = SKILL_DB[category].keywords.filter(keyword =>
             text.includes(keyword.toLowerCase())
         );
         if (hits.length > 0) {
-            foundSkills[category] = hits;
+            extractedSkills[category] = hits;
             totalSkillCount += hits.length;
             categoryCount++;
         }
@@ -187,7 +204,7 @@ export const analyzeJD = (company, role, jdText) => {
 
     // Default if no skills found
     if (totalSkillCount === 0) {
-        foundSkills['general'] = ['Fresher Basics', 'Communication', 'Aptitude'];
+        extractedSkills.other = ['Communication', 'Problem solving', 'Basic coding', 'Projects'];
     }
 
     // 2. Score Calculation
@@ -202,7 +219,7 @@ export const analyzeJD = (company, role, jdText) => {
 
     // 3. Generate Questions (Pick random 10 from detected categories)
     let pool = [];
-    Object.keys(foundSkills).forEach(cat => {
+    Object.keys(extractedSkills).forEach(cat => {
         if (SKILL_DB[cat]) {
             pool = [...pool, ...SKILL_DB[cat].questions];
         }
@@ -221,30 +238,52 @@ export const analyzeJD = (company, role, jdText) => {
     // Shuffle and pick 10
     const questions = pool.sort(() => 0.5 - Math.random()).slice(0, 10);
 
-    // 4. Generate 7-Day Plan
-    const plan = [
+    // 4. Generate Checklist (Standardized Schema)
+    const checklist = {
+        round1: ["Quantitative Aptitude", "Logical Reasoning", "Verbal Ability", "Resume Review"],
+        round2: ["Data Structures (Arrays/Strings)", "Basic Algorithms", "Time Complexity Analysis"],
+        round3: ["Project Deep Dive", "System Design Basics", "Core CS Concepts (OS/DBMS)"],
+        round4: ["Behavioral Answers (STAR Method)", "Company Research", "Questions for Interviewer"]
+    };
+
+    if (extractedSkills.web.length > 0) checklist.round3.push("Framework Lifecycle Methodologies");
+    if (extractedSkills.data.length > 0) checklist.round2.push("SQL Queries & Normalization");
+    if (extractedSkills.cloud.length > 0) checklist.round3.push("Deployment & CI/CD Pipelines");
+
+    // 5. Generate 7-Day Plan
+    const plan7Days = [
         { day: "Day 1-2", focus: "Foundations", tasks: ["Revise Core CS Concepts (OS, DBMS)", "Practice 10 Easy LeetCode problems", "Review Aptitude formulas"] },
-        { day: "Day 3-4", focus: "Coding & Skills", tasks: ["Focus on " + (foundSkills.languages?.[0] || "Language") + " specific patterns", "Solve Medium Difficulty Problems", "Build/Refactor a small feature related to " + (foundSkills.web?.[0] || "Web")] },
+        { day: "Day 3-4", focus: "Coding & Skills", tasks: ["Focus on " + (extractedSkills.languages?.[0] || "Language") + " specific patterns", "Solve Medium Difficulty Problems", "Build/Refactor a small feature related to " + (extractedSkills.web?.[0] || "Web")] },
         { day: "Day 5", focus: "Projects", tasks: ["Deep dive into Resume Projects", "Prepare 'Challenges Faced' stories", "Mock modify your major project"] },
         { day: "Day 6", focus: "Mocks", tasks: ["Take a timed coding mock", "Record answers to HR questions", "Review System Design basics"] },
         { day: "Day 7", focus: "Revision", tasks: ["Review weak areas", "Read company engineering blog", "Relax and sleep well"] }
     ];
 
-    // 5. Company Intel & Round Mapping
+    // 6. Company Intel & Round Mapping
     const companyProfile = getCompanyProfile(company);
-    const hireProcess = generateHiringProcess(companyProfile, foundSkills);
+    const roundMapping = generateHiringProcess(companyProfile, extractedSkills);
+
+    // Initialize confidence map 
+    const skillConfidenceMap = {};
+    Object.values(extractedSkills).flat().forEach(skill => {
+        skillConfidenceMap[skill] = 'practice';
+    });
 
     return {
         id: Date.now(),
         createdAt: new Date().toISOString(),
-        company,
-        role,
+        updatedAt: new Date().toISOString(),
+        company: company || "",
+        role: role || "",
         jdText,
-        extractedSkills: foundSkills,
-        readinessScore: score,
+        extractedSkills,
+        roundMapping,
+        checklist,
+        plan7Days,
         questions,
-        plan,
-        companyProfile,
-        hireProcess
+        baseScore: score,
+        skillConfidenceMap,
+        finalScore: score,
+        companyProfile
     };
 };

@@ -20,7 +20,8 @@ import {
     Building,
     Users,
     Zap,
-    Filter
+    Filter,
+    AlertTriangle
 } from 'lucide-react';
 import {
     Card,
@@ -68,7 +69,7 @@ const ScoreCircle = ({ score }) => {
                 />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-2xl font-bold text-gray-900">{score}%</span>
+                <span className="text-2xl font-bold text-gray-900">{Math.round(score)}%</span>
             </div>
         </div>
     );
@@ -82,12 +83,28 @@ export const Assessments = () => {
     const [formData, setFormData] = useState({ company: '', role: '', jd: '' });
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [skillConfidence, setSkillConfidence] = useState({}); // { skillName: 'know' | 'practice' }
+    const [jdWarning, setJdWarning] = useState(null);
+    const [historyError, setHistoryError] = useState(null);
 
-    // Load History
+    // Load History with robust error handling
     useEffect(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-            setHistory(JSON.parse(saved));
+        try {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if (Array.isArray(parsed)) {
+                    // Filter out corrupted entries
+                    const validHistory = parsed.filter(item => item && item.id && item.baseScore !== undefined);
+                    setHistory(validHistory);
+                    if (validHistory.length < parsed.length) {
+                        console.warn("Some history entries were corrupted and removed.");
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Failed to load history:", e);
+            setHistoryError("One saved entry couldn't be loaded. History was reset.");
+            localStorage.removeItem(STORAGE_KEY);
         }
     }, []);
 
@@ -98,22 +115,23 @@ export const Assessments = () => {
         }
     }, [currentAnalysis]);
 
+    // Validation Effect
+    useEffect(() => {
+        if (formData.jd.length > 0 && formData.jd.length < 200) {
+            setJdWarning("This JD is too short to analyze deeply. Paste full JD for better output.");
+        } else {
+            setJdWarning(null);
+        }
+    }, [formData.jd]);
+
     const handleAnalyze = () => {
-        if (!formData.company || !formData.role || !formData.jd) return;
+        if (!formData.jd) return;
 
         setIsAnalyzing(true);
         setTimeout(() => {
             const result = analyzeJD(formData.company, formData.role, formData.jd);
 
-            // Initialize default confidence map (all need practice initially)
-            const initialConfidence = {};
-            Object.values(result.extractedSkills).flat().forEach(skill => {
-                initialConfidence[skill] = 'practice';
-            });
-            result.skillConfidenceMap = initialConfidence;
-            result.baseReadinessScore = result.readinessScore; // Store base score
-
-            // Save to history
+            // skillConfidenceMap is already initialized in analyzeJD now
             const newHistory = [result, ...history].slice(0, 10);
             setHistory(newHistory);
             localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
@@ -132,18 +150,16 @@ export const Assessments = () => {
     const clearHistory = () => {
         setHistory([]);
         localStorage.removeItem(STORAGE_KEY);
+        setHistoryError(null);
     };
 
-    // Live Score Logic
-    const calculateCurrentScore = () => {
-        if (!currentAnalysis) return 0;
-        let score = currentAnalysis.baseReadinessScore || currentAnalysis.readinessScore;
-
-        Object.entries(skillConfidence).forEach(([skill, status]) => {
+    // Live Score Logic - Based on baseScore
+    const calculateLiveScore = (baseScore, confidenceMap) => {
+        let score = baseScore;
+        Object.values(confidenceMap).forEach((status) => {
             if (status === 'know') score += 2;
             if (status === 'practice') score -= 2;
         });
-
         return Math.max(0, Math.min(100, score));
     };
 
@@ -153,10 +169,13 @@ export const Assessments = () => {
 
             // Persist changes to history immediately
             if (currentAnalysis) {
+                const newFinalScore = calculateLiveScore(currentAnalysis.baseScore, next);
+
                 const updatedAnalysis = {
                     ...currentAnalysis,
                     skillConfidenceMap: next,
-                    readinessScore: calculateCurrentScore() // update visible score in object for safety
+                    finalScore: newFinalScore,
+                    updatedAt: new Date().toISOString()
                 };
 
                 const updatedHistory = history.map(h => h.id === currentAnalysis.id ? updatedAnalysis : h);
@@ -178,21 +197,21 @@ export const Assessments = () => {
         if (!currentAnalysis) return "";
         return `
 JOB ANALYSIS REPORT
-Company: ${currentAnalysis.company}
-Role: ${currentAnalysis.role}
+Company: ${currentAnalysis.company || "N/A"}
+Role: ${currentAnalysis.role || "N/A"}
 Date: ${new Date(currentAnalysis.createdAt).toLocaleDateString()}
-Score: ${calculateCurrentScore()}%
+Score: ${currentAnalysis.finalScore}%
 
 SKILLS:
 ${Object.entries(currentAnalysis.extractedSkills).map(([cat, skills]) =>
-            `\n[${cat.toUpperCase()}]\n` + skills.map(s => `- ${s} (${skillConfidence[s]?.toUpperCase() || 'PRACTICE'})`).join('\n')
+            `\n[${cat.toUpperCase()}]\n` + (skills.length > 0 ? skills.map(s => `- ${s} (${skillConfidence[s]?.toUpperCase() || 'PRACTICE'})`).join('\n') : "  No skills detected")
         ).join('\n')}
 
 HIRING PROCESS:
-${currentAnalysis.hireProcess?.map(r => `${r.name}: ${r.type}`).join('\n') || 'N/A'}
+${currentAnalysis.roundMapping?.map(r => `${r.name}: ${r.type}`).join('\n') || 'N/A'}
 
 7-DAY PLAN:
-${currentAnalysis.plan.map(d => `${d.day}: ${d.focus}\n${d.tasks.map(t => `  - ${t}`).join('\n')}`).join('\n')}
+${currentAnalysis.plan7Days.map(d => `${d.day}: ${d.focus}\n${d.tasks.map(t => `  - ${t}`).join('\n')}`).join('\n')}
 
 QUESTIONS:
 ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
@@ -203,20 +222,20 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
         const element = document.createElement("a");
         const file = new Blob([generateExportText()], { type: 'text/plain' });
         element.href = URL.createObjectURL(file);
-        element.download = `Analysis_${currentAnalysis.company}_${currentAnalysis.role}.txt`;
+        element.download = `Analysis_${currentAnalysis.company || 'Job'}_${currentAnalysis.role || 'Role'}.txt`;
         document.body.appendChild(element);
         element.click();
     };
 
     if (view === 'results' && currentAnalysis) {
-        const currentScore = calculateCurrentScore();
+        const currentScore = currentAnalysis.finalScore;
         const weakSkills = Object.entries(skillConfidence)
             .filter(([_, status]) => status === 'practice')
             .map(([skill]) => skill)
             .slice(0, 3);
 
         const companyIntel = currentAnalysis.companyProfile || { size: 'Unknown', industry: 'Tech', focus: 'General' };
-        const process = currentAnalysis.hireProcess || [];
+        const process = currentAnalysis.roundMapping || [];
 
         return (
             <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -228,7 +247,7 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                         &larr; Back to Analysis
                     </button>
                     <div className="flex gap-2">
-                        <button onClick={() => copyToClipboard(currentAnalysis.plan.map(d => `${d.day}: ${d.focus}\n${d.tasks.join('\n')}`).join('\n\n'))} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-200 rounded-md hover:bg-gray-50 flex items-center gap-2">
+                        <button onClick={() => copyToClipboard(currentAnalysis.plan7Days.map(d => `${d.day}: ${d.focus}\n${d.tasks.join('\n')}`).join('\n\n'))} className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-200 rounded-md hover:bg-gray-50 flex items-center gap-2">
                             <Copy size={12} /> Plan
                         </button>
                         <button onClick={downloadTxt} className="px-3 py-1.5 text-xs font-medium bg-indigo-50 border border-indigo-100 text-indigo-700 rounded-md hover:bg-indigo-100 flex items-center gap-2">
@@ -249,11 +268,11 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                                 <div className="w-full space-y-3 text-left">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-500">Company</span>
-                                        <span className="font-semibold text-gray-900">{currentAnalysis.company}</span>
+                                        <span className="font-semibold text-gray-900">{currentAnalysis.company || "Not specified"}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-500">Role</span>
-                                        <span className="font-semibold text-gray-900">{currentAnalysis.role}</span>
+                                        <span className="font-semibold text-gray-900">{currentAnalysis.role || "Not specified"}</span>
                                     </div>
                                     <div className="flex justify-between text-sm">
                                         <span className="text-gray-500">Analyzed</span>
@@ -263,7 +282,7 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                             </CardContent>
                         </Card>
 
-                        {/* Company Intel Card - NEW */}
+                        {/* Company Intel Card */}
                         <Card className="bg-gradient-to-br from-gray-50 to-white">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2 text-base">
@@ -314,33 +333,36 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4">
-                                    {Object.entries(currentAnalysis.extractedSkills).map(([cat, skills]) => (
-                                        <div key={cat}>
-                                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{cat}</h4>
-                                            <div className="flex flex-wrap gap-2">
-                                                {skills.map((skill, i) => {
-                                                    const status = skillConfidence[skill] || 'practice';
-                                                    return (
-                                                        <button
-                                                            key={skill + i}
-                                                            onClick={() => toggleSkill(skill)}
-                                                            className={`
-                                                                px-3 py-1 text-xs font-medium rounded-full border transition-all flex items-center gap-1.5
-                                                                ${status === 'know'
-                                                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                                                                    : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
-                                                                }
-                                                            `}
-                                                        >
-                                                            {status === 'know' ? <CheckCircle size={10} /> : <XCircle size={10} />}
-                                                            {skill}
-                                                        </button>
-                                                    );
-                                                })}
+                                    {Object.entries(currentAnalysis.extractedSkills).map(([cat, skills]) => {
+                                        if (skills.length === 0) return null;
+                                        return (
+                                            <div key={cat}>
+                                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">{cat.replace(/([A-Z])/g, ' $1').trim()}</h4>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {skills.map((skill, i) => {
+                                                        const status = skillConfidence[skill] || 'practice';
+                                                        return (
+                                                            <button
+                                                                key={skill + i}
+                                                                onClick={() => toggleSkill(skill)}
+                                                                className={`
+                                                                    px-3 py-1 text-xs font-medium rounded-full border transition-all flex items-center gap-1.5
+                                                                    ${status === 'know'
+                                                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                                                                        : 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                                                                    }
+                                                                `}
+                                                            >
+                                                                {status === 'know' ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                                                                {skill}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
-                                    {Object.keys(currentAnalysis.extractedSkills).length === 0 && (
+                                        );
+                                    })}
+                                    {Object.keys(currentAnalysis.extractedSkills).every(k => currentAnalysis.extractedSkills[k].length === 0) && (
                                         <p className="text-sm text-gray-500 italic">No specific technical keywords detected.</p>
                                     )}
                                 </div>
@@ -351,7 +373,7 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                     {/* Right Col: Process, Plan & Checklist */}
                     <div className="lg:col-span-2 space-y-6">
 
-                        {/* Round Mapping - NEW */}
+                        {/* Round Mapping */}
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
@@ -397,7 +419,7 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                             </CardHeader>
                             <CardContent>
                                 <div className="space-y-4">
-                                    {currentAnalysis.plan.map((day, i) => (
+                                    {currentAnalysis.plan7Days.map((day, i) => (
                                         <div key={i} className="flex gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors border border-transparent hover:border-gray-100">
                                             <div className="flex-shrink-0 w-16 text-sm font-bold text-indigo-600 pt-1">
                                                 {day.day}
@@ -467,6 +489,11 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
             <div className="mb-8">
                 <h1 className="text-3xl font-bold text-gray-900">Job Description Analysis</h1>
                 <p className="text-gray-500 mt-2">Paste a JD to get a tailored preparation strategy.</p>
+                {historyError && (
+                    <div className="mt-4 p-3 bg-red-50 text-red-700 text-sm rounded-md border border-red-200 flex items-center gap-2">
+                        <AlertTriangle size={16} /> {historyError}
+                    </div>
+                )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -479,7 +506,7 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                     <CardContent className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Company Name</label>
+                                <label className="text-sm font-medium text-gray-700">Company Name <span className="text-gray-400 font-normal">(Optional)</span></label>
                                 <input
                                     type="text"
                                     placeholder="e.g. Google, Startup Inc."
@@ -489,7 +516,7 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <label className="text-sm font-medium text-gray-700">Role / Title</label>
+                                <label className="text-sm font-medium text-gray-700">Role / Title <span className="text-gray-400 font-normal">(Optional)</span></label>
                                 <input
                                     type="text"
                                     placeholder="e.g. SDE-1, Frontend Dev"
@@ -500,13 +527,18 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Job Description Text</label>
+                            <label className="text-sm font-medium text-gray-700">Job Description Text <span className="text-red-500">*</span></label>
                             <textarea
                                 placeholder="Paste the full JD content here..."
-                                className="w-full h-48 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50/50 resize-none text-sm leading-relaxed"
+                                className={`w-full h-48 px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50/50 resize-none text-sm leading-relaxed ${jdWarning ? 'border-amber-300 focus:ring-amber-200' : ''}`}
                                 value={formData.jd}
                                 onChange={(e) => setFormData({ ...formData, jd: e.target.value })}
                             />
+                            {jdWarning && (
+                                <p className="text-xs text-amber-600 flex items-center gap-1 mt-1 animate-in fade-in">
+                                    <AlertTriangle size={12} /> {jdWarning}
+                                </p>
+                            )}
                         </div>
                     </CardContent>
                     <CardFooter className="flex justify-end gap-3 pt-2">
@@ -554,27 +586,15 @@ ${currentAnalysis.questions.map((q, i) => `${i + 1}. ${q}`).join('\n')}
                                     className="p-3 bg-white rounded-lg border border-gray-100 hover:border-indigo-200 shadow-sm hover:shadow-md cursor-pointer transition-all group"
                                 >
                                     <div className="flex justify-between items-start mb-1">
-                                        <h4 className="font-semibold text-gray-900 text-sm group-hover:text-indigo-600 transition-colors line-clamp-1">{item.role}</h4>
+                                        <h4 className="font-semibold text-gray-900 text-sm group-hover:text-indigo-600 transition-colors line-clamp-1">{item.role || "Role not specified"}</h4>
                                         <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                                            {
-                                                (() => {
-                                                    // Calculate score dynamically for history item display
-                                                    let score = item.baseReadinessScore || item.readinessScore;
-                                                    if (item.skillConfidenceMap) {
-                                                        Object.values(item.skillConfidenceMap).forEach((status) => {
-                                                            if (status === 'know') score += 2;
-                                                            if (status === 'practice') score -= 2;
-                                                        });
-                                                    }
-                                                    return Math.max(0, Math.min(100, score));
-                                                })()
-                                            }%
+                                            {item.finalScore !== undefined ? Math.round(item.finalScore) : Math.round(item.baseScore)}%
                                         </span>
                                     </div>
-                                    <p className="text-xs text-gray-500 truncate">{item.company}</p>
+                                    <p className="text-xs text-gray-500 truncate">{item.company || "Company not specified"}</p>
                                     <div className="flex justify-between items-center mt-2">
                                         <span className="text-[10px] text-gray-400">
-                                            {new Date(item.createdAt).toLocaleDateString()}
+                                            {new Date(item.updatedAt || item.createdAt).toLocaleDateString()}
                                         </span>
                                         <ArrowRight size={12} className="text-gray-300 group-hover:text-indigo-500 opacity-0 group-hover:opacity-100 transition-all transform translate-x-[-4px] group-hover:translate-x-0" />
                                     </div>
