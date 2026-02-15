@@ -9,6 +9,7 @@ import {
 } from './pages/Placeholders';
 import { Dashboard } from './pages/Dashboard';
 import { Assessments } from './pages/Assessments';
+import { TestChecklist, ShipReadiness } from './pages/DevTools';
 
 function App() {
   return (
@@ -23,6 +24,8 @@ function App() {
           <Route path="/assessments" element={<Assessments />} />
           <Route path="/resources" element={<Resources />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/prp/07-test" element={<TestChecklist />} />
+          <Route path="/prp/08-ship" element={<ShipReadiness />} />
         </Route>
 
         {/* Catch-all Redirect */}
