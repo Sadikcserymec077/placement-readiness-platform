@@ -9,7 +9,7 @@ import {
 } from './pages/Placeholders';
 import { Dashboard } from './pages/Dashboard';
 import { Assessments } from './pages/Assessments';
-import { TestChecklist, ShipReadiness } from './pages/DevTools';
+import { TestChecklist, ShipReadiness, ProofPage } from './pages/DevTools';
 
 function App() {
   return (
@@ -22,10 +22,13 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/practice" element={<Practice />} />
           <Route path="/assessments" element={<Assessments />} />
+          <Route path="/results" element={<Navigate to="/assessments" replace />} />
+          <Route path="/history" element={<Navigate to="/assessments" replace />} />
           <Route path="/resources" element={<Resources />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/prp/07-test" element={<TestChecklist />} />
           <Route path="/prp/08-ship" element={<ShipReadiness />} />
+          <Route path="/prp/proof" element={<ProofPage />} />
         </Route>
 
         {/* Catch-all Redirect */}

@@ -8,7 +8,12 @@ import {
     ExternalLink,
     ChevronRight,
     ClipboardList,
-    ShieldCheck
+    ShieldCheck,
+    Link as LinkIcon,
+    CheckCircle,
+    Copy,
+    Award,
+    Globe
 } from 'lucide-react';
 import {
     Card,
@@ -20,7 +25,19 @@ import {
 } from '../components/ui/shadcn';
 import { Link, useNavigate } from 'react-router-dom';
 
-const STORAGE_KEY = 'prp_test_checklist';
+const CHECKLIST_KEY = 'prp_test_checklist';
+const PROOF_KEY = 'prp_final_submission';
+
+const PROJECT_STEPS = [
+    "Project Setup & Routing",
+    "Job Analysis Core Logic",
+    "UI Implementation (Shadcn/Tailwind)",
+    "Interactive Features (Scoring/Toggles)",
+    "Persistence & History",
+    "Company Intelligence Engine",
+    "Testing & Validation",
+    "Final Polish & Shipping"
+];
 
 const TEST_ITEMS = [
     { id: 'validation', label: 'JD required validation works', hint: 'Try analyzing with empty JD. Button should be disabled.' },
@@ -41,7 +58,7 @@ export const TestChecklist = () => {
     // Load from storage
     useEffect(() => {
         try {
-            const saved = localStorage.getItem(STORAGE_KEY);
+            const saved = localStorage.getItem(CHECKLIST_KEY);
             if (saved) {
                 setCheckedItems(JSON.parse(saved));
             }
@@ -54,13 +71,13 @@ export const TestChecklist = () => {
     const handleCheck = (id) => {
         const updated = { ...checkedItems, [id]: !checkedItems[id] };
         setCheckedItems(updated);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+        localStorage.setItem(CHECKLIST_KEY, JSON.stringify(updated));
     };
 
     const handleReset = () => {
         if (confirm('Reset all test progress?')) {
             setCheckedItems({});
-            localStorage.removeItem(STORAGE_KEY);
+            localStorage.removeItem(CHECKLIST_KEY);
         }
     };
 
@@ -150,7 +167,7 @@ export const TestChecklist = () => {
                         <RotateCcw size={14} /> Reset checklist
                     </button>
                     <div className="text-xs text-gray-400">
-                        Checklist ID: {STORAGE_KEY}
+                        Checklist ID: {CHECKLIST_KEY}
                     </div>
                 </CardFooter>
             </Card>
@@ -163,7 +180,7 @@ export const ShipReadiness = () => {
     const [status, setStatus] = useState('checking');
 
     useEffect(() => {
-        const saved = localStorage.getItem(STORAGE_KEY);
+        const saved = localStorage.getItem(CHECKLIST_KEY);
         const checkedItems = saved ? JSON.parse(saved) : {};
         const passedCount = TEST_ITEMS.filter(i => checkedItems[i.id]).length;
         const totalCount = TEST_ITEMS.length;
@@ -206,6 +223,10 @@ export const ShipReadiness = () => {
                 All 10/10 QA tests passed. The platform is stable, validated, and ready for production deployment.
             </p>
 
+            <Link to="/prp/proof" className="inline-flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 text-lg font-bold shadow-xl shadow-indigo-200 transition-all transform hover:-translate-y-1 mb-12">
+                Generate Final Proof <Award size={20} />
+            </Link>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
                 <div className="p-6 bg-white border border-gray-100 rounded-xl shadow-sm hover:shadow-md transition-shadow">
                     <ShieldCheck className="text-emerald-500 mx-auto mb-3" size={32} />
@@ -217,13 +238,208 @@ export const ShipReadiness = () => {
                     <p className="text-sm text-gray-500">Release Version</p>
                 </div>
             </div>
+        </div>
+    );
+};
 
-            <div className="mt-12 p-4 bg-gray-50 rounded-lg inline-block">
-                <p className="text-xs text-gray-400 font-mono">
-                    DEPLOY_SHA: {Math.random().toString(36).substring(7).toUpperCase()} •
-                    STATUS: <span className="text-emerald-500 font-bold">GREEN</span>
-                </p>
+export const ProofPage = () => {
+    const [status, setStatus] = useState('checking');
+    const [links, setLinks] = useState({ lovable: '', github: '', deployed: '' });
+    const [completedSteps, setCompletedSteps] = useState({});
+
+    // Check checklist status
+    useEffect(() => {
+        const saved = localStorage.getItem(CHECKLIST_KEY);
+        const checkedItems = saved ? JSON.parse(saved) : {};
+        const passedCount = TEST_ITEMS.filter(i => checkedItems[i.id]).length;
+        const totalCount = TEST_ITEMS.length;
+
+        if (passedCount !== totalCount) {
+            setStatus('locked');
+        } else {
+            setStatus('unlocked');
+            // Load proof data
+            const savedProof = localStorage.getItem(PROOF_KEY);
+            if (savedProof) {
+                const parsed = JSON.parse(savedProof);
+                setLinks(parsed.links || { lovable: '', github: '', deployed: '' });
+                setCompletedSteps(parsed.completedSteps || {});
+            }
+        }
+    }, []);
+
+    const handleLinkChange = (key, value) => {
+        const newLinks = { ...links, [key]: value };
+        setLinks(newLinks);
+        saveProof(newLinks, completedSteps);
+    };
+
+    const toggleStep = (step) => {
+        const newSteps = { ...completedSteps, [step]: !completedSteps[step] };
+        setCompletedSteps(newSteps);
+        saveProof(links, newSteps);
+    };
+
+    const saveProof = (currentLinks, currentSteps) => {
+        localStorage.setItem(PROOF_KEY, JSON.stringify({
+            links: currentLinks,
+            completedSteps: currentSteps
+        }));
+    };
+
+    const isValidUrl = (url) => {
+        try {
+            new URL(url);
+            return true;
+        } catch (_) {
+            return false;
+        }
+    };
+
+    const areLinksValid = isValidUrl(links.lovable) && isValidUrl(links.github) && isValidUrl(links.deployed);
+    const areStepsComplete = PROJECT_STEPS.every(step => completedSteps[step]);
+
+    // Also independently verify checklist status
+    const savedChecklist = localStorage.getItem(CHECKLIST_KEY);
+    const checklistItems = savedChecklist ? JSON.parse(savedChecklist) : {};
+    const checklistComplete = TEST_ITEMS.filter(i => checklistItems[i.id]).length === TEST_ITEMS.length;
+
+    const isShippable = areLinksValid && areStepsComplete && checklistComplete;
+
+    const copySubmission = () => {
+        const text = `Placement Readiness Platform — Final Submission
+
+Lovable Project: ${links.lovable}
+GitHub Repository: ${links.github}
+Live Deployment: ${links.deployed}
+
+Core Capabilities:
+- JD skill extraction (deterministic)
+- Round mapping engine
+- 7-day prep plan
+- Interactive readiness scoring
+- History persistence`;
+        navigator.clipboard.writeText(text);
+        alert("Submission Proof Copied!");
+    };
+
+    if (status === 'locked') {
+        return (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 animate-in zoom-in-95 duration-300">
+                <Lock size={40} className="text-gray-400 mb-4" />
+                <h1 className="text-2xl font-bold text-gray-900">Checklist Incomplete</h1>
+                <p className="text-gray-500 mt-2 mb-6">Complete the QA checklist before generating proof.</p>
+                <Link to="/prp/07-test" className="text-indigo-600 hover:underline">Go to QA</Link>
             </div>
+        );
+    }
+
+    return (
+        <div className="max-w-3xl mx-auto animate-in fade-in duration-500 py-12">
+
+            <div className="text-center mb-10">
+                <div className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-bold uppercase tracking-wider mb-4 
+                    ${isShippable ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {isShippable ? <CheckCircle size={16} /> : <AlertTriangle size={16} />}
+                    Status: {isShippable ? 'SHIPPED' : 'IN PROGRESS'}
+                </div>
+                <h1 className="text-3xl font-bold text-gray-900">Final Submission Proof</h1>
+            </div>
+
+            {isShippable && (
+                <div className="mb-8 p-8 bg-gradient-to-br from-indigo-900 to-indigo-800 rounded-2xl text-white text-center shadow-xl transform animate-in slide-in-from-bottom-4 duration-700">
+                    <Award size={48} className="mx-auto text-yellow-400 mb-4" />
+                    <h2 className="text-2xl font-bold mb-2">You built a real product.</h2>
+                    <p className="text-indigo-200 text-lg leading-relaxed max-w-lg mx-auto">
+                        Not a tutorial. Not a clone.<br />
+                        A structured tool that solves a real problem.<br />
+                        <span className="text-white font-semibold mt-2 block">This is your proof of work.</span>
+                    </p>
+                </div>
+            )}
+
+            <Card className="mb-8">
+                <CardHeader>
+                    <CardTitle>1. Artifact Links</CardTitle>
+                    <CardDescription>Required for shipping validation.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Lovable Project URL</label>
+                        <div className="relative">
+                            <LinkIcon size={16} className="absolute left-3 top-3 text-gray-400" />
+                            <input
+                                type="text"
+                                className="w-full pl-10 pr-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                placeholder="https://lovable.dev/..."
+                                value={links.lovable}
+                                onChange={(e) => handleLinkChange('lovable', e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">GitHub Repository</label>
+                        <div className="relative">
+                            <LinkIcon size={16} className="absolute left-3 top-3 text-gray-400" />
+                            <input
+                                type="text"
+                                className="w-full pl-10 pr-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                placeholder="https://github.com/..."
+                                value={links.github}
+                                onChange={(e) => handleLinkChange('github', e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Deployed Application URL</label>
+                        <div className="relative">
+                            <Globe size={16} className="absolute left-3 top-3 text-gray-400" />
+                            <input
+                                type="text"
+                                className="w-full pl-10 pr-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+                                placeholder="https://..."
+                                value={links.deployed}
+                                onChange={(e) => handleLinkChange('deployed', e.target.value)}
+                            />
+                        </div>
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="mb-8">
+                <CardHeader>
+                    <CardTitle>2. Workflow Verification</CardTitle>
+                    <CardDescription>Confirm completion of all development phases.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {PROJECT_STEPS.map((step) => (
+                            <label key={step} className="flex items-center gap-3 p-3 rounded-lg border hover:bg-gray-50 cursor-pointer transition-colors">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    checked={!!completedSteps[step]}
+                                    onChange={() => toggleStep(step)}
+                                />
+                                <span className={`text-sm ${completedSteps[step] ? 'text-gray-900 font-medium' : 'text-gray-500'}`}>
+                                    {step}
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                </CardContent>
+            </Card>
+
+            <div className="flex justify-end">
+                <button
+                    onClick={copySubmission}
+                    disabled={!isShippable}
+                    className="flex items-center gap-2 px-6 py-3 bg-gray-900 text-white rounded-lg hover:bg-black font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                    <Copy size={18} /> Copy Final Submission
+                </button>
+            </div>
+
         </div>
     );
 };

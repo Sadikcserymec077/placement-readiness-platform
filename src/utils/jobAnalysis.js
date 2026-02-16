@@ -13,7 +13,7 @@ export const SKILL_DB = {
         ]
     },
     languages: {
-        keywords: ['Java', 'Python', 'JavaScript', 'TypeScript', 'C++', 'C#', 'Go', 'Golang', 'Rust', 'Ruby', 'Swift', 'Kotlin'],
+        keywords: ['Java', 'Python', 'JavaScript', 'TypeScript', 'C', 'C++', 'C#', 'Go', 'Golang', 'Rust', 'Ruby', 'Swift', 'Kotlin'],
         questions: [
             "Explain memory management in your primary language.",
             "What are the key differences between Java and C++? (or Python/JS)",
@@ -70,7 +70,7 @@ const ENTERPRISE_COMPANIES = [
     'jpmorgan', 'goldman sachs', 'morgan stanley', 'wells fargo', 'american express'
 ];
 
-const getCompanyProfile = (companyName) => {
+export const getCompanyProfile = (companyName) => {
     const name = (companyName || "").toLowerCase();
 
     // Heuristic 1: Check known lists
@@ -79,7 +79,7 @@ const getCompanyProfile = (companyName) => {
     if (isEnterprise) {
         return {
             size: 'Enterprise',
-            industry: 'Technology & Services',
+            industry: 'Technology Services',
             focus: 'Strong fundamentals (DSA/OS/DBMS) + System Design'
         };
     }
@@ -87,16 +87,16 @@ const getCompanyProfile = (companyName) => {
     // Heuristic 2: Name patterns
     if (name.includes('inc') || name.includes('corp') || name.includes('ltd') || name.includes('group')) {
         return {
-            size: 'Mid-Market',
-            industry: 'Corporate Services',
+            size: 'Mid-size',
+            industry: 'Technology Services',
             focus: 'Balanced mix of Coding & Framework skills'
         };
     }
 
     // Default to Startup
     return {
-        size: 'Startup / Growth',
-        industry: 'Product Development',
+        size: 'Startup',
+        industry: 'Technology Services',
         focus: 'Practical application logic, Speed, and Full-stack depth'
     };
 };
@@ -107,63 +107,55 @@ const generateHiringProcess = (profile, skills) => {
 
     if (isStartup) {
         rounds.push({
-            name: "Round 1: Practical / Screening",
-            type: "Coding",
-            desc: "Often a take-home assignment or a live pair-programming session focused on building a feature.",
-            why: "Startups value 'builders'. They want to see clean, working code for a real problem."
+            roundTitle: "Round 1: Practical / Screening",
+            focusAreas: ["Take-home assignment", "Pair-programming", "Building a feature"],
+            whyItMatters: "Startups value 'builders'. They want to see clean, working code for a real problem."
         });
 
         if (skills.web && skills.web.length > 0) {
             rounds.push({
-                name: "Round 2: Framework Deep Dive",
-                type: "Technical",
-                desc: "Questions on React/Node lifecycles, state management, and API design.",
-                why: "To verify you can ship production features starting Day 1."
+                roundTitle: "Round 2: Framework Deep Dive",
+                focusAreas: ["React/Node lifecycles", "State management", "API design"],
+                whyItMatters: "To verify you can ship production features starting Day 1."
             });
         } else {
             rounds.push({
-                name: "Round 2: Problem Solving",
-                type: "Technical",
-                desc: "Solving algorithmic problems applied to real-world scenarios.",
-                why: "To test your logical thinking and adaptability."
+                roundTitle: "Round 2: Problem Solving",
+                focusAreas: ["Algorithmic problems", "Real-world scenarios", "Logical thinking"],
+                whyItMatters: "To test your logical thinking and adaptability."
             });
         }
 
         rounds.push({
-            name: "Round 3: Founder / Culture Fit",
-            type: "Behavioral",
-            desc: "Discussion with a founder or lead engineer about product vision, ownership, and adaptability.",
-            why: "In small teams, culture and alignment are critical risks."
+            roundTitle: "Round 3: Founder / Culture Fit",
+            focusAreas: ["Product vision", "Ownership", "Adaptability"],
+            whyItMatters: "In small teams, culture and alignment are critical risks."
         });
 
     } else {
-        // Enterprise & Mid-Market
+        // Enterprise & Mid-size
         rounds.push({
-            name: "Round 1: Online Assessment",
-            type: "Aptitude & Coding",
-            desc: "Timed test on platform (HackerRank/Amcat). Includes 2-3 DSA problems + Aptitude MCQs.",
-            why: "Automated filter to screen thousands of applicants."
+            roundTitle: "Round 1: Online Assessment",
+            focusAreas: ["DSA problems", "Aptitude MCQs", "Timed test (HackerRank/Amcat)"],
+            whyItMatters: "Automated filter to screen thousands of applicants."
         });
 
         rounds.push({
-            name: "Round 2: Technical Interview I",
-            type: "DSA & Problem Solving",
-            desc: "Live coding on Data Structures (Arrays, Trees, Graphs). Code must be clean and optimized.",
-            why: "Tests core problem-solving capability independent of framework."
+            roundTitle: "Round 2: Technical Interview I",
+            focusAreas: ["Data Structures (Arrays, Trees, Graphs)", "Clean & optimized code", "Problem Solving"],
+            whyItMatters: "Tests core problem-solving capability independent of framework."
         });
 
         rounds.push({
-            name: "Round 3: Technical Interview II",
-            type: "System Design / Core CS",
-            desc: "Discussions on DBMS, OS concepts, and High/Low Level Design of a system.",
-            why: "Evaluates architectural thinking and theoretical depth."
+            roundTitle: "Round 3: Technical Interview II",
+            focusAreas: ["DBMS & OS concepts", "High/Low Level Design", "Architectural thinking"],
+            whyItMatters: "Evaluates architectural thinking and theoretical depth."
         });
 
         rounds.push({
-            name: "Round 4: Managerial / HR",
-            type: "Behavioral",
-            desc: "STAR method questions, project experiences, and salary discussions.",
-            why: "Checks team fit, communication skills, and long-term potential."
+            roundTitle: "Round 4: Managerial / HR",
+            focusAreas: ["STAR method questions", "Project experiences", "Salary discussions"],
+            whyItMatters: "Checks team fit, communication skills, and long-term potential."
         });
     }
 
@@ -210,11 +202,9 @@ export const analyzeJD = (company, role, jdText) => {
     // 2. Score Calculation
     let score = 35; // Base
     score += Math.min(30, categoryCount * 5); // +5 per category (max 30)
-    if (company && company.length > 2) score += 10;
-    if (role && role.length > 2) score += 10;
+    if (company && company.trim().length > 0) score += 10;
+    if (role && role.trim().length > 0) score += 10;
     if (jdText.length > 800) score += 10; // Detailed JD bonus
-    // Skill density bonus
-    if (totalSkillCount > 5) score += 5;
     score = Math.min(100, score); // Cap at 100
 
     // 3. Generate Questions (Pick random 10 from detected categories)
@@ -269,6 +259,13 @@ export const analyzeJD = (company, role, jdText) => {
         skillConfidenceMap[skill] = 'practice';
     });
 
+    // Calculate initial finalScore applying default practice penalties
+    let finalScore = score;
+    Object.values(skillConfidenceMap).forEach((status) => {
+        if (status === 'practice') finalScore -= 2;
+    });
+    finalScore = Math.max(0, Math.min(100, finalScore));
+
     return {
         id: Date.now(),
         createdAt: new Date().toISOString(),
@@ -283,7 +280,6 @@ export const analyzeJD = (company, role, jdText) => {
         questions,
         baseScore: score,
         skillConfidenceMap,
-        finalScore: score,
-        companyProfile
+        finalScore
     };
 };
