@@ -24,8 +24,8 @@ const skillData = [
 
 // Circular Progress Component
 const CircularProgress = ({ value, className }) => {
-    const radius = 60;
-    const stroke = 10;
+    const radius = 70;
+    const stroke = 8;
     const normalizedRadius = radius - stroke * 2;
     const circumference = normalizedRadius * 2 * Math.PI;
     const strokeDashoffset = circumference - (value / 100) * circumference;
@@ -62,8 +62,8 @@ const CircularProgress = ({ value, className }) => {
                 />
             </svg>
             <div className="absolute flex flex-col items-center justify-center">
-                <span className="text-4xl font-bold text-gray-900">{value}</span>
-                <span className="text-xs font-medium text-gray-500 uppercase tracking-widest mt-1">Score</span>
+                <span className="text-3xl font-bold text-gray-900">{value}</span>
+                <span className="text-[10px] font-medium text-gray-500 uppercase tracking-widest mt-1">Score</span>
             </div>
         </div>
     );
